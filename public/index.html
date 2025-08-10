@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Minimal March Madness</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background:#f5f7fa; color:#222; }
+    h1 { margin-top:0; }
+    fieldset { margin-bottom: 1.25rem; border:1px solid #ccc; background:#fff; padding:1rem 1.2rem; border-radius:10px; }
+    legend { font-weight:600; padding:0 .4rem; }
+    button { cursor:pointer; }
+    input, select, textarea { font:inherit; }
+    .tabs { margin-top:1rem; border-bottom:1px solid #ccc; display:flex; gap:.5rem; }
+    .tabs button { background:#e7ebf0; border:1px solid #bfc7d1; border-bottom:none; padding:.5rem .9rem; font-size:.9rem; border-radius:6px 6px 0 0; }
+    .tabs button.active { background:#fff; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,.08); }
+    .tab-content { display:none; padding:1rem; border:1px solid #bfc7d1; border-top:none; background:#fff; border-radius:0 8px 8px 8px; }
+    .tab-content.active { display:block; }
+    #bracketBuilderWrapper { overflow-x:auto; padding:.5rem; }
+    .bracket { display:flex; gap:2.2rem; align-items:stretch; min-width:1200px; }
+    .bracket-column { position:relative; display:flex; flex-direction:column; justify-content:space-between; flex:1; }
+    .bracket-column h4 { text-align:center; font-size:.8rem; letter-spacing:.5px; margin:.25rem 0 .6rem; text-transform:uppercase; color:#445; }
+    .game { position:relative; background:#fff; border:1px solid #cfd6de; border-radius:6px; padding:.4rem .45rem .55rem; width:170px; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+    .game select { width:100%; font-size:.72rem; padding:.25rem; border:1px solid #b8c2cc; border-radius:4px; background:#fdfefe; }
+    .game label { display:block; font-size:.55rem; text-transform:uppercase; letter-spacing:.5px; color:#667; margin-bottom:.25rem; font-weight:600; }
+    .game.filled { border-color:#6aa56d; box-shadow:0 0 0 2px #6aa56d22; }
+    .game.pending select { background:#fff8f0; }
+    .game.empty select { background:#fff2f2; }
+    .connector { position:absolute; right:-1.1rem; top:50%; width:1.1rem; height:1px; background:#b7bec6; }
+    .merge-guide { position:absolute; right:-1.1rem; width:1.1rem; border:1px solid #b7bec6; border-left:none; background:transparent; }
+    .round-2 .merge-guide,
+    .round-3 .merge-guide,
+    .round-4 .merge-guide { height:calc(100% + 1.1rem); top:-.55rem; border-radius:0 6px 6px 0; }
+    .round-5 .merge-guide { height:calc(100% + 3rem); top:-1.5rem; border-radius:0 10px 10px 0; }
+    .round-6 .merge-guide { display:none; }
+    .game select:focus { outline:2px solid #4d7bd6; outline-offset:2px; }
+    .game.changed { animation:flash .6s ease; }
+    @keyframes flash {
+      0% { box-shadow:0 0 0 0 rgba(76,160,255,0.9); }
+      100% { box-shadow:0 0 0 0 rgba(76,160,255,0); }
+    }
+    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.7rem; line-height:1.15rem; background:#fff; padding:.6rem; border:1px solid #d2d8de; border-radius:6px; max-height:300px; overflow:auto; }
+    table { font-size:.75rem; }
+    th, td { padding:.25rem .35rem; }
+  </style>
+</head>
+<body>
+  <h1>March Madness Minimal</h1>
+
+  <fieldset>
+    <legend>User</legend>
+    <input id="userName" placeholder="Enter name" />
+    <button id="btnCreateUser">Create / Load User</button>
+    <div style="margin-top:.4rem;">Current User ID: <span id="currentUserId">(none)</span></div>
+  </fieldset>
+
+  <div class="tabs">
+    <button id="tabBtnSubmit" class="active" data-tab="submit">Submit Bracket</button>
+    <button id="tabBtnCurrent" data-tab="current">My Bracket</button>
+  </div>
+
+  <div id="tab-submit" class="tab-content active">
+    <fieldset style="border:none; padding:0; margin:0;">
+      <p style="margin-top:0;">Select winners. Later rounds unlock automatically.</p>
+      <div id="bracketBuilderWrapper">
+        <div id="bracketBuilder"></div>
+      </div>
+      <button id="btnSubmitBracket" disabled style="margin-top:.75rem;">Submit Bracket</button>
+      <div id="submitStatus" style="margin-top:.5rem;color:#555;"></div>
+    </fieldset>
+  </div>
+
+  <div id="tab-current" class="tab-content">
+    <fieldset>
+      <legend>My Bracket</legend>
+      <div id="currentBracketMeta" style="margin-bottom:.5rem;">(no bracket loaded)</div>
+      <div id="currentBracketList" class="mono"></div>
+    </fieldset>
+  </div>
+
+  <fieldset>
+    <legend>Round Navigation (Results)</legend>
+    <div id="roundNav" class="row" style="margin-bottom:.75rem; display:flex; gap:.5rem;"></div>
+    <div id="roundGames"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Manual Result Entry</legend>
+    <input id="resultRound" type="number" min="1" max="6" value="1" style="width:70px" />
+    <input id="resultIndex" type="number" min="0" value="0" style="width:70px" />
+    <input id="resultWinner" placeholder="Winner code e.g. E1" style="width:140px;" />
+    <button id="btnSubmitResult" type="button">Add / Update Result</button>
+    <div style="font-size:.65rem; margin-top:.4rem;">
+      R1: 0–31, R2: 0–15, R3:0–7, R4:0–3, R5:0–1, R6:0
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Leaderboard</legend>
+    <button id="btnRefreshBoard" type="button">Refresh Leaderboard</button>
+    <pre id="leaderboardOutput" class="mono">[]</pre>
+  </fieldset>
+
+  <div>My Score: <span id="currentUserScore" data-score="0">(refresh leaderboard)</span></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
