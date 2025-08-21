@@ -226,6 +226,7 @@ function renderAllBrackets(){
     baseSel: state.resultsSel,
     mode:'results'
   });
+  updateSubmitStatus(); // <- added here
 }
 
 /********* Rendering (Generic) *********/
@@ -313,16 +314,19 @@ function renderInteractiveBracket({ mountId, connectorsId, baseSel, mode }){
         select.addEventListener('change', async ()=>{
           const old = baseSel[round][i];
           baseSel[round][i] = select.value;
-          // Immediate visual feedback (local)
           box.classList.toggle('filled', !!select.value);
           if(old !== select.value){
             clearDownstream(baseSel, round);
             if(mode==='results' && select.value){
               await postResult(round, i, select.value);
               await loadResults();
+              return; // loadResults triggers re-render + status update indirectly
             }
             renderAllBrackets();
             delayedRedraw();
+          }
+          if(mode==='submit'){
+            updateSubmitStatus();
           }
         });
 
@@ -436,6 +440,7 @@ el('btnCreateUser').addEventListener('click', async ()=>{
   renderAllBrackets();
   updateMyMeta();
   refreshLeaderboard();
+  updateSubmitStatus();
 });
 
 el('btnSubmitBracket').addEventListener('click', async ()=>{
@@ -451,8 +456,7 @@ el('btnSubmitBracket').addEventListener('click', async ()=>{
     return alert('Error: '+err.error);
   }
   state.currentBracket = await res.json();
-  el('submitStatus').textContent = 'Saved '+ new Date().toLocaleTimeString();
-  updateMyMeta();
+  updateSubmitStatus();
   renderAllBrackets();
   refreshLeaderboard();
 });
@@ -571,6 +575,7 @@ function redrawAllConnectors(){
   renderAllBrackets();
   refreshLeaderboard();
   delayedRedraw();
+  updateSubmitStatus();
 })();
 
 /********* Random Bracket Auto-Fill *********/
@@ -607,9 +612,39 @@ if (autoFillBtn) {
       if (!ok) return;
     }
     autoFillRandom();
-    renderAllBrackets();
+    renderAllBrackets();     // rebuild DOM
     delayedRedraw();
-    const status = document.getElementById('submitStatus');
-    if(status) status.textContent = 'Random bracket generated. Review & Submit.';
+    updateSubmitStatus();    // now shows Unsaved Changes
   });
+}
+
+// Add below utility functions section (before renderAllBrackets or anywhere top-level)
+function picksEqual(a,b){
+  if(!a || !b) return false;
+  if(a.length !== b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i] !== b[i]) return false;
+  return true;
+}
+
+function updateSubmitStatus(){
+  const elStatus = document.getElementById('submitStatus');
+  if(!elStatus) return;
+  if(!state.user){
+    elStatus.textContent = '';
+    elStatus.className = '';
+    return;
+  }
+  if(!state.currentBracket){
+    elStatus.textContent = 'Not yet submitted';
+    elStatus.className = 'status initial';
+    return;
+  }
+  const currentPicks = ensureLength(buildPicks());
+  if(picksEqual(currentPicks, state.currentBracket.picks)){
+    elStatus.textContent = 'Saved ' + new Date(state.currentBracket.submittedAt).toLocaleTimeString();
+    elStatus.className = 'status saved';
+  } else {
+    elStatus.textContent = 'Unsaved Changes';
+    elStatus.className = 'status unsaved';
+  }
 }

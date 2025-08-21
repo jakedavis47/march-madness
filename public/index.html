@@ -249,6 +249,10 @@ button:disabled { opacity:.4; cursor:not-allowed; }
 #leaderboardTable td:not(.user):not(.name) {
   font-variant-numeric:tabular-nums;
 }
+
+#submitStatus.status.saved { color: var(--text-dim); }
+#submitStatus.status.unsaved { color: var(--accent); font-weight:600; }
+#submitStatus.status.initial { color: var(--text-dim); font-style:italic; }
 </style>
 </head>
 <body>
@@ -278,7 +282,7 @@ button:disabled { opacity:.4; cursor:not-allowed; }
     <button id="btnAutoFill" type="button">Auto Fill Random</button>
     <button id="btnSubmitBracket" type="button" disabled>Submit Bracket</button>
   </div>
-  <div id="submitStatus" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+  <div id="submitStatus" style="margin-top:.5rem; font-size:.75rem;"></div>
 </div>
 
 <div id="tab-my" class="tab-content">
