@@ -1,406 +1,615 @@
+/********* State & Constants *********/
 const state = {
-  user: null,
-  results: [],
-  currentRound: 1,
-  currentBracket: null
+  user:null,
+  currentBracket:null,
+  results:[],            // raw server results objects
+  resultsSel:null        // structured results selections by round
 };
+
+const usersCache = new Map();
+
+// Helper: load all users (assuming endpoint exists)
+async function loadUsers(){
+  // If you have an /api/users endpoint returning all users; if not, skip.
+  if (usersCache.size) return;
+  try {
+    const res = await fetch('/api/users');
+    if(res.ok){
+      const arr = await res.json();
+      arr.forEach(u=>usersCache.set(u.id,u));
+    }
+  } catch(e){
+    // silent
+  }
+}
+
+// Compute per-user scores
+function computeScoresForBrackets(brackets){
+  const results = [];
+  // Flatten official winners by round using state.resultsSel
+  for (const br of brackets){
+    const picks = br.picks || [];
+    const perRound = [0,0,0,0,0,0]; // R1..R6
+    let offset = 0;
+    for(let r=1; r<=6; r++){
+      const gameCount = ROUND_GAME_COUNTS[r-1];
+      for(let i=0;i<gameCount;i++){
+        const official = state.resultsSel[r][i];
+        if(!official) continue; // no result yet
+        const userPick = picks[offset + i];
+        if(userPick && userPick === official){
+          perRound[r-1] += ROUND_WEIGHTS[r-1];
+        }
+      }
+      offset += gameCount;
+    }
+    const total = perRound.reduce((a,b)=>a+b,0);
+    results.push({
+      userId: br.userId,
+      perRound,
+      total,
+      bracketId: br.id,
+      submittedAt: br.submittedAt
+    });
+  }
+  // sort by total desc then name
+  results.sort((a,b)=>{
+    if(b.total !== a.total) return b.total - a.total;
+    const nameA = (usersCache.get(a.userId)?.name || '').toLowerCase();
+    const nameB = (usersCache.get(b.userId)?.name || '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+  return results;
+}
+
+// Render leaderboard table
+function renderLeaderboardTable(rows){
+  const tbody = document.getElementById('leaderboardBody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:1rem;">No brackets</td></tr>';
+    return;
+  }
+  rows.forEach((row, idx)=>{
+    const tr = document.createElement('tr');
+    if(state.user && row.userId === state.user.id){
+      tr.classList.add('me');
+    }
+    const userName = usersCache.get(row.userId)?.name || row.userId;
+    const roundLabels = row.perRound;
+    const tds = [
+      idx+1,
+      userName,
+      roundLabels[0],
+      roundLabels[1],
+      roundLabels[2],
+      roundLabels[3],
+      roundLabels[4],
+      roundLabels[5],
+      row.total
+    ];
+    tds.forEach((val,i)=>{
+      const td = document.createElement('td');
+      if(i===1) td.style.maxWidth='140px';
+      td.textContent = (typeof val==='number') ? String(val) : val;
+      if(i>=2 && i<=7 && val===0) td.classList.add('zero');
+      if(i===8) td.classList.add('total');
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  // Update my score
+  if(state.user){
+    const mine = rows.find(r=>r.userId===state.user.id);
+    if(mine) el('currentUserScore').textContent = mine.total;
+  }
+}
 
 const ROUND_GAME_COUNTS = [32,16,8,4,2,1];
 const ROUND_WEIGHTS = [1,2,4,8,16,32];
 const REQUIRED_LEN = ROUND_GAME_COUNTS.reduce((a,b)=>a+b,0);
-
-const el = id => document.getElementById(id);
-const userIdSpan = el('currentUserId');
-const lbOut = el('leaderboardOutput');
+const GAME_H = 80;      // was 72
+const GAP = 28;
+const GAME_UNIT = GAME_H + GAP;
+const HEADER_OFFSET = 80;
+const CONNECT_INSET = 12; // needed by drawConnectors
+// Recompute & push CSS vars
+const TOTAL_HEIGHT_PX = ROUND_GAME_COUNTS[0]*GAME_UNIT - GAP;
+document.documentElement.style.setProperty('--game-total-height', TOTAL_HEIGHT_PX + 'px');
+document.documentElement.style.setProperty('--header-offset', HEADER_OFFSET + 'px');
 
 const REGIONS = ['E','W','M','S'];
-const REGION_PAIRINGS = [
-  [1,16],[8,9],[5,12],[4,13],[6,11],[3,14],[7,10],[2,15]
-];
-const ROUND1 = REGIONS.flatMap(region =>
-  REGION_PAIRINGS.map(pair => ({
-    teams: pair.map(seed => `${region}${seed}`)
-  }))
-);
+const REGION_PAIRINGS = [[1,16],[8,9],[5,12],[4,13],[6,11],[3,14],[7,10],[2,15]];
+const ROUND1 = REGIONS.flatMap(region => REGION_PAIRINGS.map(pair => ({
+  teams: pair.map(seed => `${region}${seed}`)
+})));
 
-const selections = {
-  1: Array(32).fill(''),
-  2: Array(16).fill(''),
-  3: Array(8).fill(''),
-  4: Array(4).fill(''),
-  5: Array(2).fill(''),
-  6: Array(1).fill('')
-};
+function el(id){ return document.getElementById(id); }
 
-function startOffsetOf(round) {
-  return ROUND_GAME_COUNTS.slice(0, round - 1).reduce((a,b)=>a+b,0);
-}
-function globalIndexOf(round, indexInRound) {
-  return startOffsetOf(round) + indexInRound;
+const selections = { 1:Array(32).fill(''),2:Array(16).fill(''),3:Array(8).fill(''),4:Array(4).fill(''),5:Array(2).fill(''),6:Array(1).fill('') };
+resetResultsSel();
+
+function resetResultsSel(){
+  state.resultsSel = { 1:Array(32).fill(''),2:Array(16).fill(''),3:Array(8).fill(''),4:Array(4).fill(''),5:Array(2).fill(''),6:Array(1).fill('') };
 }
 
-function feederIndices(round, gameIndexGlobal) {
-  if (round === 1) return null;
-  // Rounds 1-4 (within regions)
-  if (round <= 4) {
-    const prevRound = round - 1;
-    const prevPerRegion = [8,4,2][prevRound - 1] || 8;
-    const currPerRegion = [4,2,1][round - 2] || 4;
-    const gamesBeforeThisRound = startOffsetOf(round);
-    const localIndex = gameIndexGlobal - gamesBeforeThisRound;
+/********* Utility *********/
+function startOffsetOf(round){ return ROUND_GAME_COUNTS.slice(0,round-1).reduce((a,b)=>a+b,0); }
+function globalIndexOf(round,index){ return startOffsetOf(round)+index; }
+function feederIndices(round, globalIndex){
+  if(round===1) return null;
+  if(round<=4){
+    const prevRound = round-1;
+    const prevPerRegion = [8,4,2][prevRound-1] || 8;
+    const currPerRegion = [4,2,1][round-2] || 4;
+    const localIndex = globalIndex - startOffsetOf(round);
     const regionIndex = Math.floor(localIndex / currPerRegion);
-    const indexInsideRegion = localIndex % currPerRegion;
+    const idxInRegion = localIndex % currPerRegion;
     const prevRegionOffset = regionIndex * prevPerRegion;
-    const g1 = prevRegionOffset + indexInsideRegion * 2;
+    const g1 = prevRegionOffset + idxInRegion*2;
     const g2 = g1 + 1;
-    const prevGlobalOffset = startOffsetOf(prevRound);
-    return [prevGlobalOffset + g1, prevGlobalOffset + g2];
+    return [startOffsetOf(prevRound)+g1, startOffsetOf(prevRound)+g2];
   }
-  // Round 5: semifinals fed by 4 regional champs (round 4)
-  if (round === 5) {
+  if(round===5){
     const round4Start = startOffsetOf(4);
-    const g = gameIndexGlobal - startOffsetOf(5);
-    return g === 0
-      ? [round4Start + 0, round4Start + 1]
-      : [round4Start + 2, round4Start + 3];
+    const g = globalIndex - startOffsetOf(5);
+    return g===0 ? [round4Start, round4Start+1] : [round4Start+2, round4Start+3];
   }
-  // Round 6: championship fed by 2 semifinals
-  if (round === 6) {
+  if(round===6){
     const round5Start = startOffsetOf(5);
-    return [round5Start + 0, round5Start + 1];
+    return [round5Start, round5Start+1];
   }
   return null;
 }
-
-function clearDownstream(fromRound) {
-  for (let r = fromRound + 1; r <= 6; r++) {
-    selections[r] = selections[r].map(()=> '');
+function roundTitle(r){
+  return ['Round 1','Round 2','Sweet 16','Elite 8','Final Four','Champion'][r-1];
+}
+function computeOptions(baseSel, round, indexInRound){
+  if(round===1) return ROUND1[indexInRound].teams;
+  const feeders = feederIndices(round, globalIndexOf(round,indexInRound));
+  if(!feeders) return [];
+  const prevRound = round-1;
+  const prevStart = startOffsetOf(prevRound);
+  const a = feeders[0]-prevStart;
+  const b = feeders[1]-prevStart;
+  const teamA = baseSel[prevRound][a] || '';
+  const teamB = baseSel[prevRound][b] || '';
+  return [teamA,teamB].filter(Boolean);
+}
+function clearDownstream(baseSel, fromRound){
+  for(let r=fromRound+1;r<=6;r++){
+    baseSel[r] = baseSel[r].map(()=> '');
   }
 }
-
-function roundTitle(r) {
-  return ['Round 1','Round 2','Sweet 16','Elite 8','Final Four','Champion'][r-1] || `R${r}`;
+function buildPicks(){
+  return [1,2,3,4,5,6].flatMap(r=>selections[r]);
+}
+function ensureLength(arr){
+  return arr.length<REQUIRED_LEN
+    ? arr.concat(Array(REQUIRED_LEN-arr.length).fill(''))
+    : arr.slice(0,REQUIRED_LEN);
 }
 
-function computeOptions(round, indexInRound) {
-  if (round === 1) return ROUND1[indexInRound].teams;
-  const feeders = feederIndices(round, globalIndexOf(round, indexInRound));
-  if (!feeders) return [];
-  const prevRound = round - 1;
-  const prevStart = startOffsetOf(prevRound);
-  const localA = feeders[0] - prevStart;
-  const localB = feeders[1] - prevStart;
-  const teamA = selections[prevRound][localA] || '';
-  const teamB = selections[prevRound][localB] || '';
-  return [teamA, teamB].filter(Boolean);
+function cloneSelectionsForMy(){
+  if(!state.currentBracket){
+    return {1:Array(32).fill(''),2:Array(16).fill(''),3:Array(8).fill(''),4:Array(4).fill(''),5:Array(2).fill(''),6:Array(1).fill('')};
+  }
+  const picks = state.currentBracket.picks;
+  const out = {};
+  let offset = 0;
+  for(let r=1;r<=6;r++){
+    const c = ROUND_GAME_COUNTS[r-1];
+    out[r] = picks.slice(offset, offset + c);
+    offset += c;
+  }
+  return out;
 }
 
-function renderBracketBuilder() {
-  const mount = el('bracketBuilder');
-  if (!mount) return;
-  mount.innerHTML = '';
-  const bracketEl = document.createElement('div');
-  bracketEl.className = 'bracket';
+// Renders all three bracket views
+function renderAllBrackets(){
+  renderInteractiveBracket({
+    mountId:'submitBracket',
+    connectorsId:'submitConnectors',
+    baseSel: selections,
+    mode:'submit'
+  });
+  renderInteractiveBracket({
+    mountId:'myBracket',
+    connectorsId:'myConnectors',
+    baseSel: cloneSelectionsForMy(),
+    mode:'read'
+  });
+  renderInteractiveBracket({
+    mountId:'resultsBracket',
+    connectorsId:'resultsConnectors',
+    baseSel: state.resultsSel,
+    mode:'results'
+  });
+}
 
-  for (let round = 1; round <= 6; round++) {
+/********* Rendering (Generic) *********/
+function renderInteractiveBracket({ mountId, connectorsId, baseSel, mode }){
+  const mount = el(mountId);
+  if(!mount) return;
+  mount.innerHTML='';
+
+  mount.classList.remove('mode-submit','mode-read','mode-results');
+  mount.classList.add('mode-'+mode);
+
+  const colHeights = TOTAL_HEIGHT_PX;
+  mount.style.setProperty('--game-total-height', colHeights+'px');
+
+  for(let round=1; round<=6; round++){
     const col = document.createElement('div');
     col.className = `bracket-column round-${round}`;
     const title = document.createElement('h4');
     title.textContent = roundTitle(round);
     col.appendChild(title);
 
-    const gameCount = ROUND_GAME_COUNTS[round - 1];
-    for (let i = 0; i < gameCount; i++) {
-      const gameBox = document.createElement('div');
-      gameBox.className = 'game';
+    const count = ROUND_GAME_COUNTS[round-1];
+    for(let i=0;i<count;i++){
+      const box = document.createElement('div');
+      box.className = 'game';
+      box.dataset.round=round;
+      box.dataset.index=i;
+
+      // Position
+      let topPx;
+      if (round === 1) {
+        topPx = HEADER_OFFSET + i * GAME_UNIT;
+      } else {
+        const groupSize = Math.pow(2, round - 1);      // number of Round1 “slots” this game spans
+        const blockSize = groupSize * GAME_UNIT;       // vertical span for this game
+        topPx = HEADER_OFFSET + i * blockSize + (blockSize / 2 - GAME_H / 2);
+      }
+      box.style.top = topPx + 'px';
 
       const label = document.createElement('label');
       label.textContent = `G${i}`;
-      gameBox.appendChild(label);
+      box.appendChild(label);
 
-      const select = document.createElement('select');
-      select.dataset.round = String(round);
-      select.dataset.index = String(i);
+      const currentValue = baseSel[round][i];
+      const opts = computeOptions(baseSel, round, i);
 
-      const currentValue = selections[round][i];
-      const options = computeOptions(round, i);
+      const shell = document.createElement('div');
+      shell.className = 'pick-shell';
 
-      if (currentValue) gameBox.classList.add('filled');
-      if (!options.length && round > 1) gameBox.classList.add('pending');
-      if (round === 1 && !options.length) gameBox.classList.add('empty');
+      if(mode==='read') {
+        box.classList.add('readonly');
+        if(currentValue){ box.classList.add('filled'); }
+        const val = document.createElement('div');
+        val.className='value';
+        val.textContent = currentValue || (opts.length? '(pending)' : '(wait)');
+        shell.appendChild(val);
 
-      const blankOpt = document.createElement('option');
-      blankOpt.value = '';
-      blankOpt.textContent = options.length ? '(pick)' : '(wait)';
-      select.appendChild(blankOpt);
+        // Add correctness classes if an official result exists for this game
+        const officialWinner = state.resultsSel[round][i];
+        if (officialWinner) {
+          if (currentValue && currentValue === officialWinner) {
+            box.classList.add('correct');
+          } else if (currentValue && currentValue !== officialWinner) {
+            box.classList.add('incorrect');
+          }
+        }
+      } else {
+        const select = document.createElement('select');
+        select.dataset.round=round;
+        select.dataset.index=i;
 
-      options.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = t;
-        select.appendChild(opt);
-      });
+        const blank = document.createElement('option');
+        blank.value='';
+        blank.textContent = opts.length? '(pick)' : '(wait)';
+        select.appendChild(blank);
 
-      if (currentValue && options.includes(currentValue)) {
-        select.value = currentValue;
-      } else if (currentValue && !options.includes(currentValue)) {
-        selections[round][i] = '';
+        opts.forEach(o=>{
+          const opt=document.createElement('option');
+          opt.value=o; opt.textContent=o; select.appendChild(opt);
+        });
+
+        if(currentValue && opts.includes(currentValue)) select.value=currentValue;
+        if(currentValue) box.classList.add('filled');
+
+        select.addEventListener('change', async ()=>{
+          const old = baseSel[round][i];
+          baseSel[round][i] = select.value;
+          // Immediate visual feedback (local)
+          box.classList.toggle('filled', !!select.value);
+          if(old !== select.value){
+            clearDownstream(baseSel, round);
+            if(mode==='results' && select.value){
+              await postResult(round, i, select.value);
+              await loadResults();
+            }
+            renderAllBrackets();
+            delayedRedraw();
+          }
+        });
+
+        shell.appendChild(select);
       }
 
-      select.addEventListener('change', () => {
-        const old = selections[round][i];
-        selections[round][i] = select.value;
-        if (old !== select.value) {
-          gameBox.classList.add('changed');
-          clearDownstream(round);
-          renderBracketBuilder();
-        }
-      });
-
-      gameBox.appendChild(select);
-
-      if (round < 6) {
-        const connector = document.createElement('div');
-        connector.className = 'connector';
-        gameBox.appendChild(connector);
-        if (i % 2 === 0) {
-          const merge = document.createElement('div');
-          merge.className = 'merge-guide';
-          gameBox.appendChild(merge);
-        }
-      }
-
-      col.appendChild(gameBox);
+      box.appendChild(shell);
+      col.appendChild(box);
     }
-    bracketEl.appendChild(col);
+    mount.appendChild(col);
   }
-  mount.appendChild(bracketEl);
+  // Defer connector drawing until after layout (and visibility if tab just activated)
+  requestAnimationFrame(() => drawConnectors(mountId, connectorsId, baseSel, mode));
 }
 
-function buildPicksArray() {
-  return [1,2,3,4,5,6].flatMap(r => selections[r]);
-}
+function drawConnectors(mountId, svgId, baseSel, mode){
+  const svg = el(svgId);
+  const root = el(mountId);
+  if(!svg || !root) return;
+  svg.innerHTML='';
+  const containerRect = root.getBoundingClientRect();
 
-function populateSelectionsFromExisting() {
-  if (!state.currentBracket) return;
-  const picks = state.currentBracket.picks;
-  let offset = 0;
-  for (let r=1; r<=6; r++) {
-    const count = ROUND_GAME_COUNTS[r-1];
-    selections[r] = picks.slice(offset, offset + count);
-    offset += count;
+  for(let round=1; round<=5; round++){
+    const games = root.querySelectorAll(`.game[data-round="${round}"]`);
+    games.forEach(g=>{
+      const idx = parseInt(g.dataset.index,10);
+      const nextIdx = Math.floor(idx/2);
+      const nextEl = root.querySelector(`.game[data-round="${round+1}"][data-index="${nextIdx}"]`);
+      if(!nextEl) return;
+
+      const gRect = g.getBoundingClientRect();
+      const tRect = nextEl.getBoundingClientRect();
+
+      const startX = gRect.right - containerRect.left - CONNECT_INSET;
+      const startY = gRect.top + gRect.height/2 - containerRect.top;
+      const endX   = tRect.left - containerRect.left + CONNECT_INSET;
+      const endY   = tRect.top + tRect.height/2 - containerRect.top;
+      const midX   = (startX + endX)/2;
+
+      const d = `M${startX},${startY} C${midX},${startY} ${midX},${endY} ${endX},${endY}`;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', d);
+      path.classList.add('connector-path');
+
+      const feederChosenA = !!baseSel[round][idx];
+      const siblingIdx = idx % 2 === 0 ? idx+1 : idx-1;
+      const feederChosenB = !!baseSel[round][siblingIdx];
+      const nextChosen = !!baseSel[round+1][nextIdx];
+
+      const shouldHighlight = (mode !== 'read') && feederChosenA && feederChosenB && nextChosen;
+      if (shouldHighlight){
+        path.classList.add('active');
+      }
+      svg.appendChild(path);
+    });
   }
 }
 
-function ensureLength(arr) {
-  if (arr.length < REQUIRED_LEN) {
-    return arr.concat(Array(REQUIRED_LEN - arr.length).fill(''));
-  }
-  return arr.slice(0, REQUIRED_LEN);
-}
-
-// User creation
-el('btnCreateUser').addEventListener('click', async () => {
-  const name = el('userName').value.trim();
-  if (!name) return alert('Enter name');
-  const res = await fetch('/api/users', {
+/********* Server Interaction *********/
+async function postResult(round,indexInRound,winner){
+  await fetch('/api/results',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name })
+    body:JSON.stringify({ round, indexInRound, winner })
   });
-  if (!res.ok) return alert('User error');
+}
+
+async function loadResults(){
+  const res = await fetch('/api/results');
+  state.results = await res.json();
+  resetResultsSel();
+  state.results.forEach(r=>{
+    state.resultsSel[r.round][r.indexInRound] = r.winner;
+  });
+  // Re-render to update correctness highlighting
+  renderAllBrackets();
+  delayedRedraw();
+}
+
+async function loadUserBracket(){
+  if(!state.user) return;
+  const res = await fetch('/api/brackets');
+  const all = await res.json();
+  state.currentBracket = all.find(b=>b.userId===state.user.id) || null;
+  if(state.currentBracket){
+    // load into selections
+    let offset=0;
+    for(let r=1;r<=6;r++){
+      const c = ROUND_GAME_COUNTS[r-1];
+      selections[r] = state.currentBracket.picks.slice(offset, offset+c);
+      offset+=c;
+    }
+  }
+}
+
+/********* Actions *********/
+el('btnCreateUser').addEventListener('click', async ()=>{
+  const name = el('userName').value.trim();
+  if(!name) return alert('Enter name');
+  const res = await fetch('/api/users',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ name })
+  });
+  if(!res.ok) return alert('User error');
   state.user = await res.json();
-  userIdSpan.textContent = state.user.id;
+  el('currentUserId').textContent = `${state.user.id} (${state.user.name})`;
   el('btnSubmitBracket').disabled = false;
   await loadUserBracket();
-  populateSelectionsFromExisting();
-  renderBracketBuilder();
-});
-
-// Submit bracket
-el('btnSubmitBracket').addEventListener('click', async () => {
-  if (!state.user) return alert('Create user first');
-  const picks = ensureLength(buildPicksArray());
-  const res = await fetch('/api/brackets', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ userId: state.user.id, picks })
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    return alert('Error: ' + err.error);
-  }
-  const bracket = await res.json();
-  state.currentBracket = bracket;
-  renderCurrentBracket();
-  el('submitStatus').textContent = 'Saved at ' + new Date().toLocaleTimeString();
+  renderAllBrackets();
+  updateMyMeta();
   refreshLeaderboard();
 });
 
-// Manual result form
-const roundInput = el('resultRound');
-const indexInput = el('resultIndex');
-const winnerInput = el('resultWinner');
-const btnSubmitResult = el('btnSubmitResult');
-if (btnSubmitResult) {
-  btnSubmitResult.addEventListener('click', async () => {
-    const round = Number(roundInput.value);
-    const indexInRound = Number(indexInput.value);
-    const winner = winnerInput.value.trim();
-    if (!winner) return alert('Winner required');
-    await submitResult(round, indexInRound, winner);
+el('btnSubmitBracket').addEventListener('click', async ()=>{
+  if(!state.user) return alert('Create user first');
+  const picks = ensureLength(buildPicks());
+  const res = await fetch('/api/brackets',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ userId: state.user.id, picks })
   });
-}
+  if(!res.ok){
+    const err = await res.json();
+    return alert('Error: '+err.error);
+  }
+  state.currentBracket = await res.json();
+  el('submitStatus').textContent = 'Saved '+ new Date().toLocaleTimeString();
+  updateMyMeta();
+  renderAllBrackets();
+  refreshLeaderboard();
+});
 
 el('btnRefreshBoard').addEventListener('click', refreshLeaderboard);
 
-async function submitResult(round, indexInRound, winner) {
-  const res = await fetch('/api/results', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ round, indexInRound, winner })
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    alert('Error: ' + err.error);
-    return;
-  }
-  await res.json();
-  await fetchResults();
-  refreshLeaderboard();
-  if (round === state.currentRound) renderRoundGames();
+function normalizeBracketResponse(data){
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.brackets)) return data.brackets;
+  if (data && Array.isArray(data.data)) return data.data;
+  return [];
 }
 
-async function fetchResults() {
-  const res = await fetch('/api/results');
-  state.results = await res.json();
-}
+async function refreshLeaderboard(){
+  // Do NOT await loadResults here if you call refreshLeaderboard from loadResults already
+  await loadUsers();
 
-async function refreshLeaderboard() {
-  const res = await fetch('/api/leaderboard');
-  const board = await res.json();
-  lbOut.textContent = JSON.stringify(board, null, 2);
-  if (state.user) {
-    const me = board.find(b => b.userId === state.user.id);
-    if (me) el('currentUserScore').textContent = me.total;
-  }
-}
-
-// Round navigation (results viewing)
-function buildRoundNav() {
-  const nav = el('roundNav');
-  if (!nav) return;
-  nav.innerHTML = '';
-  for (let i=1;i<=6;i++) {
-    const btn = document.createElement('button');
-    btn.textContent = 'Round ' + i;
-    btn.style.fontWeight = (i === state.currentRound) ? '700' : '400';
-    btn.addEventListener('click', () => {
-      state.currentRound = i;
-      buildRoundNav();
-      renderRoundGames();
-    });
-    nav.appendChild(btn);
-  }
-}
-
-function renderRoundGames() {
-  const container = el('roundGames');
-  if (!container) return;
-  container.innerHTML = '';
-  const round = state.currentRound;
-  const gameCount = ROUND_GAME_COUNTS[round - 1];
-  const startOffset = startOffsetOf(round);
-  const table = document.createElement('table');
-  table.style.width = '100%';
-  table.style.borderCollapse = 'collapse';
-
-  const thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Game</th><th>Recorded Winner</th><th>Set</th></tr>';
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  for (let i=0;i<gameCount;i++) {
-    const globalIndex = startOffset + i;
-    const result = state.results.find(r => r.globalIndex === globalIndex);
-    const tr = document.createElement('tr');
-    tr.style.borderBottom = '1px solid #eee';
-
-    const tdG = document.createElement('td');
-    tdG.textContent = `R${round} #${i} (g${globalIndex})`;
-    const tdW = document.createElement('td');
-    tdW.textContent = result ? result.winner : '—';
-    const tdA = document.createElement('td');
-    const btn = document.createElement('button');
-    btn.textContent = result ? 'Update' : 'Set';
-    btn.addEventListener('click', async () => {
-      const winner = prompt('Winner code?', result?.winner || '');
-      if (!winner) return;
-      await submitResult(round, i, winner.trim());
-    });
-    tdA.appendChild(btn);
-
-    tr.appendChild(tdG);
-    tr.appendChild(tdW);
-    tr.appendChild(tdA);
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  container.appendChild(table);
-}
-
-// Tabs
-const tabButtons = [el('tabBtnSubmit'), el('tabBtnCurrent')];
-tabButtons.forEach(btn => {
-  btn?.addEventListener('click', () => {
-    const target = btn.getAttribute('data-tab');
-    tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.tab-content').forEach(sec => {
-      sec.classList.toggle('active', sec.id === 'tab-' + target);
-    });
-    if (target === 'current') {
-      loadUserBracket();
-    } else if (target === 'submit') {
-      renderBracketBuilder();
+  let brackets = [];
+  try {
+    const res = await fetch('/api/brackets');
+    if(!res.ok){
+      console.warn('Brackets fetch not ok:', res.status, res.statusText);
+    } else {
+      const raw = await res.json();
+      brackets = normalizeBracketResponse(raw);
     }
+  } catch(e){
+    console.warn('Brackets fetch error:', e);
+  }
+
+  // Fallback: ensure at least current bracket appears
+  if (state.currentBracket && !brackets.some(b=>b.id === state.currentBracket.id)) {
+    brackets.push(state.currentBracket);
+  }
+
+  if (!state.resultsSel) {
+    // ensure results loaded once
+    await loadResults();
+  }
+
+  const rows = computeScoresForBrackets(brackets);
+  renderLeaderboardTable(rows);
+  const stamp = new Date().toLocaleTimeString();
+  const last = document.getElementById('lastBoardRefresh');
+  if(last) last.textContent = 'Updated ' + stamp;
+}
+
+/********* Tabs *********/
+const tabButtons = [
+  el('tabBtnSubmit'),
+  el('tabBtnMy'),
+  el('tabBtnResults'),
+  el('tabBtnLeaderboard')
+];
+tabButtons.forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const target = btn.dataset.tab;
+    tabButtons.forEach(b=>b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.tab-content').forEach(sec=>{
+      sec.classList.toggle('active', sec.id === 'tab-'+target);
+    });
+    if(target==='my'){
+      // Re-render ONLY my bracket now that it's visible
+      renderInteractiveBracket({
+        mountId:'myBracket',
+        connectorsId:'myConnectors',
+        baseSel: cloneSelectionsForMy(),
+        mode:'read'
+      });
+      updateMyMeta();
+    } else if(target==='results'){
+      renderInteractiveBracket({
+        mountId:'resultsBracket',
+        connectorsId:'resultsConnectors',
+        baseSel: state.resultsSel,
+        mode:'results'
+      });
+    } else if(target==='submit'){
+      renderInteractiveBracket({
+        mountId:'submitBracket',
+        connectorsId:'submitConnectors',
+        baseSel: selections,
+        mode:'submit'
+      });
+    } else if(target==='leaderboard'){
+      refreshLeaderboard();
+    }
+    delayedRedraw();
   });
 });
 
-// Load bracket
-async function loadUserBracket() {
-  if (!state.user) return;
-  const res = await fetch('/api/brackets');
-  if (!res.ok) return;
-  const all = await res.json();
-  const mine = all.find(b => b.userId === state.user.id);
-  state.currentBracket = mine || null;
-  if (mine) populateSelectionsFromExisting();
-  renderCurrentBracket();
-  if (document.querySelector('#tab-submit.tab-content.active')) {
-    renderBracketBuilder();
-  }
+// --- (Optional but recommended) add resize & scroll listeners after init to keep connectors aligned:
+window.addEventListener('resize', ()=> {
+  redrawAllConnectors();
+});
+
+function redrawAllConnectors(){
+  drawConnectors('submitBracket','submitConnectors', selections, 'submit');
+  drawConnectors('myBracket','myConnectors', cloneSelectionsForMy(), 'read');
+  drawConnectors('resultsBracket','resultsConnectors', state.resultsSel, 'results');
 }
 
-function renderCurrentBracket() {
-  const meta = el('currentBracketMeta');
-  const list = el('currentBracketList');
-  if (!meta || !list) return;
-  if (!state.currentBracket) {
-    meta.textContent = 'No bracket submitted.';
-    list.textContent = '';
-    return;
+// Attach scroll listener to each wrapper (if they exist)
+['submitConnectors','myConnectors','resultsConnectors'].forEach(id=>{
+  const svg = el(id);
+  if(svg && svg.parentElement){ // parent is bracketWrapper
+    svg.parentElement.addEventListener('scroll', ()=> {
+      redrawAllConnectors();
+    }, { passive:true });
   }
-  const picks = state.currentBracket.picks;
-  const filled = picks.filter(p => p).length;
-  meta.textContent = `Bracket ID ${state.currentBracket.id} | Picks filled ${filled}/63 | Last submit ${state.currentBracket.submittedAt}`;
-  list.textContent = picks.map((p,i)=>`${String(i).padStart(2,'0')}: ${p || '-'}`).join('\n');
-}
-
-// Init
-(async function init() {
-  buildRoundNav();
-  await fetchResults();
-  renderRoundGames();
+});
+/********* Init *********/
+(async function init(){
+  await loadResults();
+  await loadUserBracket();
+  renderAllBrackets();
   refreshLeaderboard();
-  renderBracketBuilder();
+  delayedRedraw();
 })();
+
+/********* Random Bracket Auto-Fill *********/
+function anyPicksExist() {
+  return [1,2,3,4,5,6].some(r => selections[r].some(v => v));
+}
+
+function autoFillRandom() {
+  // Overwrite all rounds
+  for (let r=1; r<=6; r++) {
+    const count = ROUND_GAME_COUNTS[r-1];
+    for (let i=0; i<count; i++) {
+      let options;
+      if (r === 1) {
+        options = ROUND1[i].teams.slice();
+      } else {
+        options = computeOptions(selections, r, i);
+      }
+      if (options.length === 0) {
+        selections[r][i] = '';
+      } else {
+        selections[r][i] = options[Math.floor(Math.random()*options.length)];
+      }
+    }
+  }
+}
+
+// Attach handler
+const autoFillBtn = document.getElementById('btnAutoFill');
+if (autoFillBtn) {
+  autoFillBtn.addEventListener('click', () => {
+    if (anyPicksExist()) {
+      const ok = confirm('Overwrite existing picks with a random bracket?');
+      if (!ok) return;
+    }
+    autoFillRandom();
+    renderAllBrackets();
+    delayedRedraw();
+    const status = document.getElementById('submitStatus');
+    if(status) status.textContent = 'Random bracket generated. Review & Submit.';
+  });
+}

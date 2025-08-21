@@ -44,18 +44,40 @@ function computeLeaderboard() {
   }).sort((a,b)=> b.total - a.total);
 }
 
+// Helper to slugify the provided name
+function slugify(name){
+  return name.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'')
+    || 'user';
+}
+
 // Routes
 app.get('/api/health', (_req,res)=>res.json({ ok:true }));
 
-app.post('/api/users', (req,res)=>{
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error:'name required' });
-  let u = users.find(x=>x.name === name);
-  if (!u) {
-    u = { id: String(users.length+1), name };
-    users.push(u);
+app.post('/api/users', (req,res) => {
+  const { name } = req.body || {};
+  if(!name || !name.trim()){
+    return res.status(400).json({ error:'Name required' });
   }
-  res.json(u);
+  let base = slugify(name);
+  let candidate = base;
+  let suffix = 2;
+  while (users.find(u => u.id === candidate)){
+    candidate = `${base}-${suffix++}`;
+  }
+  let user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
+  if(!user){
+    user = { id: candidate, name: name.trim() };
+    users.push(user);
+  }
+  res.json(user);
+});
+
+// (Optional) GET all users for leaderboard name resolution
+app.get('/api/users', (req,res)=>{
+  res.json(users);
 });
 
 app.post('/api/brackets', (req,res)=>{

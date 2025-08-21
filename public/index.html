@@ -1,107 +1,332 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Minimal March Madness</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background:#f5f7fa; color:#222; }
-    h1 { margin-top:0; }
-    fieldset { margin-bottom: 1.25rem; border:1px solid #ccc; background:#fff; padding:1rem 1.2rem; border-radius:10px; }
-    legend { font-weight:600; padding:0 .4rem; }
-    button { cursor:pointer; }
-    input, select, textarea { font:inherit; }
-    .tabs { margin-top:1rem; border-bottom:1px solid #ccc; display:flex; gap:.5rem; }
-    .tabs button { background:#e7ebf0; border:1px solid #bfc7d1; border-bottom:none; padding:.5rem .9rem; font-size:.9rem; border-radius:6px 6px 0 0; }
-    .tabs button.active { background:#fff; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,.08); }
-    .tab-content { display:none; padding:1rem; border:1px solid #bfc7d1; border-top:none; background:#fff; border-radius:0 8px 8px 8px; }
-    .tab-content.active { display:block; }
-    #bracketBuilderWrapper { overflow-x:auto; padding:.5rem; }
-    .bracket { display:flex; gap:2.2rem; align-items:stretch; min-width:1200px; }
-    .bracket-column { position:relative; display:flex; flex-direction:column; justify-content:space-between; flex:1; }
-    .bracket-column h4 { text-align:center; font-size:.8rem; letter-spacing:.5px; margin:.25rem 0 .6rem; text-transform:uppercase; color:#445; }
-    .game { position:relative; background:#fff; border:1px solid #cfd6de; border-radius:6px; padding:.4rem .45rem .55rem; width:170px; box-shadow:0 1px 2px rgba(0,0,0,.08); }
-    .game select { width:100%; font-size:.72rem; padding:.25rem; border:1px solid #b8c2cc; border-radius:4px; background:#fdfefe; }
-    .game label { display:block; font-size:.55rem; text-transform:uppercase; letter-spacing:.5px; color:#667; margin-bottom:.25rem; font-weight:600; }
-    .game.filled { border-color:#6aa56d; box-shadow:0 0 0 2px #6aa56d22; }
-    .game.pending select { background:#fff8f0; }
-    .game.empty select { background:#fff2f2; }
-    .connector { position:absolute; right:-1.1rem; top:50%; width:1.1rem; height:1px; background:#b7bec6; }
-    .merge-guide { position:absolute; right:-1.1rem; width:1.1rem; border:1px solid #b7bec6; border-left:none; background:transparent; }
-    .round-2 .merge-guide,
-    .round-3 .merge-guide,
-    .round-4 .merge-guide { height:calc(100% + 1.1rem); top:-.55rem; border-radius:0 6px 6px 0; }
-    .round-5 .merge-guide { height:calc(100% + 3rem); top:-1.5rem; border-radius:0 10px 10px 0; }
-    .round-6 .merge-guide { display:none; }
-    .game select:focus { outline:2px solid #4d7bd6; outline-offset:2px; }
-    .game.changed { animation:flash .6s ease; }
-    @keyframes flash {
-      0% { box-shadow:0 0 0 0 rgba(76,160,255,0.9); }
-      100% { box-shadow:0 0 0 0 rgba(76,160,255,0); }
-    }
-    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.7rem; line-height:1.15rem; background:#fff; padding:.6rem; border:1px solid #d2d8de; border-radius:6px; max-height:300px; overflow:auto; }
-    table { font-size:.75rem; }
-    th, td { padding:.25rem .35rem; }
-  </style>
+<meta charset="UTF-8" />
+<title>March Madness</title>
+<style>
+:root {
+  --bg:#0f141b; --bg-alt:#18202b; --surface:#1f2933; --surface-alt:#27323f;
+  --border:#32404f; --text:#e8edf2; --text-dim:#a9b4c0;
+  --primary:#3d8bfd; --primary-accent:#60a5ff; --accent:#f59e0b;
+  --success:#34d399; --danger:#ef4444;
+  --header-offset:80px;
+  --col-width:250px;
+  --gap-x:3.5rem;
+  --pick-shell-width: 88%; /* tweak 84–92% if you want */
+}
+html,body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+body { padding:2rem; }
+h1 { margin:0 0 1rem; font-weight:600; background:linear-gradient(90deg,var(--primary),var(--accent)); -webkit-background-clip:text; color:transparent; }
+fieldset { border:1px solid var(--border); background:var(--surface); padding:1rem 1.2rem; border-radius:10px; margin:0 0 1.2rem; }
+legend { font-weight:600; color:var(--primary-accent); }
+input, select, button { font:inherit; }
+input, select {
+  background:var(--surface-alt); border:1px solid var(--border); color:var(--text);
+  border-radius:6px; padding:.45rem .6rem;
+}
+input:focus, select:focus { outline:none; box-shadow:0 0 0 2px #3d8bfd66; border-color:var(--primary); }
+button {
+  background:var(--primary); border:1px solid var(--primary); color:#fff;
+  padding:.55rem .95rem; border-radius:8px; font-weight:500; cursor:pointer;
+  transition:.15s background;
+}
+button:hover { background:var(--primary-accent); }
+button:disabled { opacity:.4; cursor:not-allowed; }
+
+.tabs { display:flex; gap:.5rem; margin-bottom:0; }
+.tabs button {
+  background:var(--surface-alt); border:1px solid var(--border); border-bottom:none;
+  border-radius:8px 8px 0 0; padding:.55rem .9rem; font-size:.85rem;
+}
+.tabs button.active {
+  background:var(--surface); color:var(--primary-accent); font-weight:600;
+  box-shadow:0 2px 4px #0005, inset 0 -2px 0 var(--accent);
+}
+
+.tab-content {
+  display:none; padding:1rem; border:1px solid var(--border); border-top:none;
+  background:var(--surface); border-radius:0 10px 10px 10px; margin-bottom:1.2rem;
+}
+.tab-content.active { display:block; }
+
+.bracketWrapper {
+  position:relative;
+  overflow-x:auto;
+  padding:.75rem 2rem 1.5rem 1rem;
+  background:var(--surface-alt);
+  border:1px solid var(--border);
+  border-radius:12px;
+}
+.bracket {
+  position:relative;
+  display:flex;
+  gap:var(--gap-x);
+  min-width:calc(var(--col-width)*6 + var(--gap-x)*5);
+}
+
+.bracket-column {
+  position:relative;
+  width:var(--col-width);
+  height:calc(var(--header-offset) + var(--game-total-height));
+}
+
+.bracket-column h4 {
+  position:absolute;
+  top:8px; left:0; right:0;
+  text-align:center;
+  font-size:.9rem;
+  margin:0;
+  letter-spacing:.8px;
+  pointer-events:none;
+  color:var(--text-dim);
+}
+
+.game {
+  position:absolute;
+  box-sizing:border-box;
+  width:100%;
+  height:80px;
+  left:0;
+  padding:.55rem 0 .6rem; /* symmetrical horizontally so centering is true */
+  display:flex;
+  flex-direction:column;
+  gap:.45rem;
+  background:linear-gradient(145deg,var(--surface),var(--surface-alt));
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 2px 4px -1px #0008, 0 0 0 1px #0002 inset;
+  transition:.18s border,.18s background;
+  overflow:hidden;
+}
+.game label {
+  font-size:.63rem;
+  margin:0;
+  letter-spacing:.6px;
+  color:var(--text-dim);
+  font-weight:600;
+  text-align:center;
+  line-height:1;
+  padding:0 .4rem;
+}
+.pick-shell {
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface-alt);
+  width:var(--pick-shell-width);
+  margin:0 auto;
+  padding:.45rem .6rem;
+  transition:.18s border,.18s box-shadow,.18s background;
+}
+.game:hover .pick-shell { border-color:var(--primary); }
+.pick-shell select,
+.pick-shell .value {
+  border:none;
+  background:transparent;
+  width:100%;
+  font-size:.9rem;
+  font-weight:600;
+  letter-spacing:.3px;
+  color:var(--text);
+  padding:0;
+  line-height:1.15;
+  outline:none;
+  text-align:center;
+  white-space:nowrap;
+}
+.pick-shell select { min-height:32px; }
+.pick-shell select:focus { box-shadow:0 0 0 2px #3d8bfd66; border-radius:8px; }
+.mode-submit .game.filled .pick-shell,
+.mode-results .game.filled .pick-shell {
+  border-color:var(--success);
+  background:linear-gradient(135deg,rgba(52,211,153,.24),rgba(52,211,153,.08));
+  box-shadow:0 0 0 2px rgba(52,211,153,.35);
+}
+.game.correct .pick-shell {
+  border-color: var(--success);
+  background: linear-gradient(135deg, rgba(52,211,153,.30), rgba(52,211,153,.10));
+  box-shadow: 0 0 0 2px rgba(52,211,153,.40);
+}
+.game.incorrect .pick-shell {
+  border-color: var(--danger);
+  background: linear-gradient(135deg, rgba(239,68,68,.30), rgba(239,68,68,.10));
+  box-shadow: 0 0 0 2px rgba(239,68,68,.40);
+}
+
+#submitConnectors,#myConnectors,#resultsConnectors {
+  position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:2;
+}
+.bracket .game { z-index:3; }
+
+.connector-path { stroke:#4a5663; stroke-width:2; fill:none; stroke-linecap:round; opacity:.85; }
+.connector-path.active { stroke:var(--success); stroke-width:3; opacity:1; filter:drop-shadow(0 0 4px #34d39980); }
+
+.mono { font-family:ui-monospace,Menlo,monospace; font-size:.7rem; background:var(--surface-alt); padding:.65rem .75rem; border:1px solid var(--border); border-radius:8px; color:var(--text-dim); }
+
+*::-webkit-scrollbar { height:10px; width:10px; }
+*::-webkit-scrollbar-track { background:var(--surface); }
+*::-webkit-scrollbar-thumb { background:var(--border); border-radius:6px; }
+*::-webkit-scrollbar-thumb:hover { background:var(--primary); }
+
+#leaderboardContainer {
+  margin-top:.8rem;
+  background:var(--surface-alt);
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 2px 4px -1px #0008;
+}
+
+#leaderboardTable {
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  font-size:.78rem;
+  line-height:1.25;
+}
+
+#leaderboardTable thead {
+  background:linear-gradient(90deg,var(--surface),var(--surface-alt));
+}
+
+#leaderboardTable th, #leaderboardTable td {
+  padding:.45rem .6rem;
+  text-align:right;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+
+#leaderboardTable th:first-child,
+#leaderboardTable td:first-child {
+  text-align:center;
+}
+
+#leaderboardTable th:nth-child(2),
+#leaderboardTable td:nth-child(2) {
+  text-align:left;
+}
+
+#leaderboardTable tbody tr:last-child td {
+  border-bottom:none;
+}
+
+#leaderboardTable tbody tr:hover {
+  background:#ffffff08;
+}
+
+#leaderboardTable tbody tr.me {
+  background:linear-gradient(90deg,rgba(61,139,253,.18),rgba(61,139,253,.05));
+}
+
+#leaderboardTable tbody tr.me td {
+  font-weight:600;
+  color:var(--primary-accent);
+}
+
+#leaderboardTable th {
+  font-weight:600;
+  font-size:.7rem;
+  letter-spacing:.6px;
+  color:var(--text-dim);
+  text-transform:uppercase;
+  position:sticky;
+  top:0;
+  z-index:1;
+}
+
+#leaderboardTable td.total {
+  font-weight:600;
+  color:var(--text);
+}
+
+#leaderboardTable td.zero {
+  opacity:.45;
+}
+
+#leaderboardTable td:not(.user):not(.name) {
+  font-variant-numeric:tabular-nums;
+}
+</style>
 </head>
 <body>
-  <h1>March Madness Minimal</h1>
+<h1>March Madness</h1>
 
-  <fieldset>
-    <legend>User</legend>
-    <input id="userName" placeholder="Enter name" />
-    <button id="btnCreateUser">Create / Load User</button>
-    <div style="margin-top:.4rem;">Current User ID: <span id="currentUserId">(none)</span></div>
-  </fieldset>
+<fieldset>
+  <legend>User</legend>
+  <input id="userName" placeholder="Enter name" />
+  <button id="btnCreateUser" type="button">Create / Load User</button>
+  <div style="margin-top:.45rem;">Current User ID: <span id="currentUserId">(none)</span></div>
+</fieldset>
 
-  <div class="tabs">
-    <button id="tabBtnSubmit" class="active" data-tab="submit">Submit Bracket</button>
-    <button id="tabBtnCurrent" data-tab="current">My Bracket</button>
+<div class="tabs">
+  <button id="tabBtnSubmit" class="active" data-tab="submit">Submit</button>
+  <button id="tabBtnMy" data-tab="my">My Bracket</button>
+  <button id="tabBtnResults" data-tab="results">Results</button>
+  <button id="tabBtnLeaderboard" data-tab="leaderboard">Leaderboard</button>
+</div>
+
+<div id="tab-submit" class="tab-content active">
+  <p style="margin-top:0;">Make your picks or auto‑fill randomly.</p>
+  <div class="bracketWrapper">
+    <div id="submitBracket" class="bracket"></div>
+    <svg id="submitConnectors"></svg>
   </div>
-
-  <div id="tab-submit" class="tab-content active">
-    <fieldset style="border:none; padding:0; margin:0;">
-      <p style="margin-top:0;">Select winners. Later rounds unlock automatically.</p>
-      <div id="bracketBuilderWrapper">
-        <div id="bracketBuilder"></div>
-      </div>
-      <button id="btnSubmitBracket" disabled style="margin-top:.75rem;">Submit Bracket</button>
-      <div id="submitStatus" style="margin-top:.5rem;color:#555;"></div>
-    </fieldset>
+  <div style="margin-top:.9rem; display:flex; gap:.8rem; flex-wrap:wrap;">
+    <button id="btnAutoFill" type="button">Auto Fill Random</button>
+    <button id="btnSubmitBracket" type="button" disabled>Submit Bracket</button>
   </div>
+  <div id="submitStatus" style="margin-top:.5rem; font-size:.75rem; color:var(--text-dim);"></div>
+</div>
 
-  <div id="tab-current" class="tab-content">
-    <fieldset>
-      <legend>My Bracket</legend>
-      <div id="currentBracketMeta" style="margin-bottom:.5rem;">(no bracket loaded)</div>
-      <div id="currentBracketList" class="mono"></div>
-    </fieldset>
+<div id="tab-my" class="tab-content">
+  <p style="margin-top:0;">Read‑only view of your submitted bracket.</p>
+  <div class="bracketWrapper">
+    <div id="myBracket" class="bracket"></div>
+    <svg id="myConnectors"></svg>
   </div>
+  <div id="myMeta" style="margin-top:.6rem; font-size:.75rem; color:var(--text-dim);"></div>
+</div>
 
-  <fieldset>
-    <legend>Round Navigation (Results)</legend>
-    <div id="roundNav" class="row" style="margin-bottom:.75rem; display:flex; gap:.5rem;"></div>
-    <div id="roundGames"></div>
-  </fieldset>
+<div id="tab-results" class="tab-content">
+  <p style="margin-top:0;">Enter official results (this affects scoring).</p>
+  <div class="bracketWrapper">
+    <div id="resultsBracket" class="bracket"></div>
+    <svg id="resultsConnectors"></svg>
+  </div>
+  <div id="resultsStatus" style="margin-top:.6rem; font-size:.75rem; color:var(--text-dim);"></div>
+</div>
 
-  <fieldset>
-    <legend>Manual Result Entry</legend>
-    <input id="resultRound" type="number" min="1" max="6" value="1" style="width:70px" />
-    <input id="resultIndex" type="number" min="0" value="0" style="width:70px" />
-    <input id="resultWinner" placeholder="Winner code e.g. E1" style="width:140px;" />
-    <button id="btnSubmitResult" type="button">Add / Update Result</button>
-    <div style="font-size:.65rem; margin-top:.4rem;">
-      R1: 0–31, R2: 0–15, R3:0–7, R4:0–3, R5:0–1, R6:0
-    </div>
-  </fieldset>
-
-  <fieldset>
-    <legend>Leaderboard</legend>
+<div id="tab-leaderboard" class="tab-content">
+  <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
     <button id="btnRefreshBoard" type="button">Refresh Leaderboard</button>
-    <pre id="leaderboardOutput" class="mono">[]</pre>
-  </fieldset>
+    <span id="lastBoardRefresh" style="font-size:.7rem; color:var(--text-dim);"></span>
+  </div>
+  <div id="leaderboardContainer">
+    <table id="leaderboardTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>User</th>
+          <th>R1</th>
+          <th>R2</th>
+          <th>Sweet 16</th>
+          <th>Elite 8</th>
+            <th>Final Four</th>
+          <th>Champ</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboardBody">
+        <tr><td colspan="9" style="text-align:center; padding:1rem;">No data</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:.6rem; font-size:.75rem;">My Score: <span id="currentUserScore">0</span></div>
+</div>
 
-  <div>My Score: <span id="currentUserScore" data-score="0">(refresh leaderboard)</span></div>
-
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
