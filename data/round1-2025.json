@@ -1,0 +1,296 @@
+{
+  "year": 2025,
+  "fetchedAt": "2025-08-21T00:57:19.196Z",
+  "games": [
+    {
+      "region": "East",
+      "seedA": 1,
+      "seedB": 16,
+      "teams": [
+        "E1",
+        "E16"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 8,
+      "seedB": 9,
+      "teams": [
+        "E8",
+        "E9"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 5,
+      "seedB": 12,
+      "teams": [
+        "E5",
+        "E12"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 4,
+      "seedB": 13,
+      "teams": [
+        "E4",
+        "E13"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 6,
+      "seedB": 11,
+      "teams": [
+        "E6",
+        "E11"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 3,
+      "seedB": 14,
+      "teams": [
+        "E3",
+        "E14"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 7,
+      "seedB": 10,
+      "teams": [
+        "E7",
+        "E10"
+      ]
+    },
+    {
+      "region": "East",
+      "seedA": 2,
+      "seedB": 15,
+      "teams": [
+        "E2",
+        "E15"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 1,
+      "seedB": 16,
+      "teams": [
+        "W1",
+        "W16"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 8,
+      "seedB": 9,
+      "teams": [
+        "W8",
+        "W9"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 5,
+      "seedB": 12,
+      "teams": [
+        "W5",
+        "W12"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 4,
+      "seedB": 13,
+      "teams": [
+        "W4",
+        "W13"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 6,
+      "seedB": 11,
+      "teams": [
+        "W6",
+        "W11"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 3,
+      "seedB": 14,
+      "teams": [
+        "W3",
+        "W14"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 7,
+      "seedB": 10,
+      "teams": [
+        "W7",
+        "W10"
+      ]
+    },
+    {
+      "region": "West",
+      "seedA": 2,
+      "seedB": 15,
+      "teams": [
+        "W2",
+        "W15"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 1,
+      "seedB": 16,
+      "teams": [
+        "M1",
+        "M16"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 8,
+      "seedB": 9,
+      "teams": [
+        "M8",
+        "M9"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 5,
+      "seedB": 12,
+      "teams": [
+        "M5",
+        "M12"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 4,
+      "seedB": 13,
+      "teams": [
+        "M4",
+        "M13"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 6,
+      "seedB": 11,
+      "teams": [
+        "M6",
+        "M11"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 3,
+      "seedB": 14,
+      "teams": [
+        "M3",
+        "M14"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 7,
+      "seedB": 10,
+      "teams": [
+        "M7",
+        "M10"
+      ]
+    },
+    {
+      "region": "Midwest",
+      "seedA": 2,
+      "seedB": 15,
+      "teams": [
+        "M2",
+        "M15"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 1,
+      "seedB": 16,
+      "teams": [
+        "S1",
+        "S16"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 8,
+      "seedB": 9,
+      "teams": [
+        "S8",
+        "S9"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 5,
+      "seedB": 12,
+      "teams": [
+        "S5",
+        "S12"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 4,
+      "seedB": 13,
+      "teams": [
+        "S4",
+        "S13"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 6,
+      "seedB": 11,
+      "teams": [
+        "S6",
+        "S11"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 3,
+      "seedB": 14,
+      "teams": [
+        "S3",
+        "S14"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 7,
+      "seedB": 10,
+      "teams": [
+        "S7",
+        "S10"
+      ]
+    },
+    {
+      "region": "South",
+      "seedA": 2,
+      "seedB": 15,
+      "teams": [
+        "S2",
+        "S15"
+      ]
+    }
+  ],
+  "placeholder": true,
+  "note": "Seeds not found yet"
+}

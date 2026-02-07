@@ -49,7 +49,8 @@ function computeScoresForBrackets(brackets){
       perRound,
       total,
       bracketId: br.id,
-      submittedAt: br.submittedAt
+      submittedAt: br.submittedAt,
+      bracket: br
     });
   }
   // sort by total desc then name
@@ -62,13 +63,73 @@ function computeScoresForBrackets(brackets){
   return results;
 }
 
+// Compute total remaining possible points for a bracket counting ONLY feasible picks
+// Feasible: the picked team is still alive in that game given current official results
+function computeRemainingPossiblePoints(bracket){
+  if(!bracket || !Array.isArray(bracket.picks)) return 0;
+  const picks = bracket.picks;
+  // Build alive sets per game index: aliveByRound[r][i] = Set(teamNames)
+  const aliveByRound = { 1:[], 2:[], 3:[], 4:[], 5:[], 6:[] };
+  // Round 1: use recorded winners if present, else both teams
+  for(let i=0;i<ROUND_GAME_COUNTS[0];i++){
+    const res = state.resultsSel && state.resultsSel[1] && state.resultsSel[1][i];
+    if(res) {
+      aliveByRound[1][i] = new Set([res]);
+    } else {
+      const teams = ROUND1[i]?.teams || [];
+      aliveByRound[1][i] = new Set(teams);
+    }
+  }
+  // Helper: feeders for game (r,i)
+  function feeders(r,i){
+    // Each game at round r>1 feeds from two games in r-1
+    // Mapping: game i at round r comes from indices 2*i and 2*i+1 at round r-1
+    return [2*i, 2*i+1];
+  }
+  // Build alive sets for rounds 2..6
+  for(let r=2;r<=6;r++){
+    const count = ROUND_GAME_COUNTS[r-1];
+    for(let i=0;i<count;i++){
+      const res = state.resultsSel && state.resultsSel[r] && state.resultsSel[r][i];
+      if(res){
+        aliveByRound[r][i] = new Set([res]);
+      } else {
+        const [aIdx,bIdx] = feeders(r-1, i); // feeders in previous round
+        const prevAlive = aliveByRound[r-1];
+        const setA = prevAlive[aIdx] || new Set();
+        const setB = prevAlive[bIdx] || new Set();
+        const union = new Set();
+        setA.forEach(t=>union.add(t));
+        setB.forEach(t=>union.add(t));
+        aliveByRound[r][i] = union;
+      }
+    }
+  }
+  // Sum weights only when game not decided yet AND user's pick is in alive set
+  let remaining = 0;
+  let offset = 0;
+  for(let r=1;r<=6;r++){
+    const count = ROUND_GAME_COUNTS[r-1];
+    const weight = ROUND_WEIGHTS[r-1];
+    for(let i=0;i<count;i++){
+      const decided = state.resultsSel && state.resultsSel[r] && state.resultsSel[r][i];
+      if(decided) { offset++; continue; }
+      const pick = picks[offset];
+      const alive = aliveByRound[r][i];
+      if(pick && alive && alive.has(pick)) remaining += weight;
+      offset++;
+    }
+  }
+  return remaining;
+}
+
 // Render leaderboard table
 function renderLeaderboardTable(rows){
   const tbody = document.getElementById('leaderboardBody');
   if(!tbody) return;
   tbody.innerHTML = '';
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:1rem;">No brackets</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:1rem;">No brackets</td></tr>';
     return;
   }
   rows.forEach((row, idx)=>{
@@ -78,6 +139,7 @@ function renderLeaderboardTable(rows){
     }
     const userName = usersCache.get(row.userId)?.name || row.userId;
     const roundLabels = row.perRound;
+  const remaining = computeRemainingPossiblePoints(row.bracket);
     const tds = [
       idx+1,
       userName,
@@ -87,7 +149,8 @@ function renderLeaderboardTable(rows){
       roundLabels[3],
       roundLabels[4],
       roundLabels[5],
-      row.total
+      row.total,
+      remaining
     ];
     tds.forEach((val,i)=>{
       const td = document.createElement('td');
@@ -95,6 +158,7 @@ function renderLeaderboardTable(rows){
       td.textContent = (typeof val==='number') ? String(val) : val;
       if(i>=2 && i<=7 && val===0) td.classList.add('zero');
       if(i===8) td.classList.add('total');
+      if(i===9) td.classList.add('remaining');
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
