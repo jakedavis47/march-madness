@@ -5,14 +5,23 @@
 <title>March Madness</title>
 <style>
 :root {
-  --bg:#0f141b; --bg-alt:#18202b; --surface:#1f2933; --surface-alt:#27323f;
-  --border:#32404f; --text:#e8edf2; --text-dim:#a9b4c0;
-  --primary:#3d8bfd; --primary-accent:#60a5ff; --accent:#f59e0b;
-  --success:#34d399; --danger:#ef4444;
+  /* March Madness theme: deep blue, court wood, orange, white, bold accent */
+  --bg: #f5f3ea;              /* warm off-white, like a court */
+  --bg-alt: #ede3d2;          /* light tan */
+  --surface: #f7e3c3;         /* light wood */
+  --surface-alt: #e6cfa4;     /* court wood */
+  --border: #b48a5a;
+  --text: #1a263b;
+  --text-dim: #4a5663;
+  --primary: #b48a5a;          /* court brown for accents */
+  --primary-accent: #f97316;  /* orange */
+  --accent: #fbbf24;          /* gold/orange */
+  --success: #22c55e;
+  --danger: #dc2626;
   --header-offset:80px;
   --col-width:250px;
   --gap-x:3.5rem;
-  --pick-shell-width: 88%; /* tweak 84–92% if you want */
+  --pick-shell-width: 88%;
 }
 html,body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
 body { padding:2rem; }
